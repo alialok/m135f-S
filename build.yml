@@ -1,0 +1,37 @@
+name: Build WiFi Modules from Physwizz Source
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Install Toolchain and Build Tools
+      run: |
+        sudo apt update
+        sudo apt install -y gcc-arm-linux-gnueabihf build-essential bc libncurses5-dev libssl-dev bison flex
+
+    - name: Configure Kernel & Enable Drivers
+      run: |
+        # تحميل الإعدادات الخاصة بـ M13
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- exynos850-m13dd_defconfig || true
+        # تفعيل كروت الشبكة المطلوبة كـ Modules (.ko)
+        echo "CONFIG_MT7601U=m" >> .config
+        echo "CONFIG_RT2800USB=m" >> .config
+        echo "CONFIG_RT2800USB_RT53XX=y" >> .config
+
+    - name: Compile Wi-Fi Modules Only
+      run: |
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- M=drivers/net/wireless modules -j$(nproc)
+
+    - name: Upload .ko Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Physwizz-WiFi-Modules
+        path: drivers/net/wireless/**/*.ko
