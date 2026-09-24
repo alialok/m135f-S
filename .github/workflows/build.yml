@@ -11,7 +11,7 @@ jobs:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
 
-    - name: Install Dependencies & Cross Compiler
+    - name: Install Dependencies
       run: |
         sudo apt update
         sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev \
@@ -19,32 +19,34 @@ jobs:
 
     - name: Configure Drivers
       run: |
-        # 1. تعيين المعمارية والمترجم
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
 
-        # 2. إنشاء ملف الإعدادات المبدئي للهاتف
+        # اختيار ملف الإعدادات
         CONF=$(find arch/arm64/configs/ -name "*m13*" -o -name "*exynos850*" 2>/dev/null | head -n 1 | xargs basename)
         if [ -z "$CONF" ]; then CONF="exynos850-m13xx_defconfig"; fi
         
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $CONF
 
-        # 3. تفعيل تعاريف الواي فاي بأسلوب الكرنل الرسمي
+        # تفعيل كروت الواي فاي
         scripts/config --enable CONFIG_NETDEVICES
         scripts/config --enable CONFIG_WLAN
         scripts/config --module CONFIG_MT7601U
         scripts/config --module CONFIG_RT2800USB
         scripts/config --enable CONFIG_RT2800USB_RT53XX
 
+        # قبول جميع التحديثات الناتجة عن التغيرات تلقائياً (يمنع التعليق)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+
     - name: Build WiFi Modules
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
 
-        # تجهيز الأدوات والرموز
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- prepare
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- scripts
+        # تجهيز الأدوات والموديولات
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- prepare -j$(nproc)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare -j$(nproc)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- scripts -j$(nproc)
 
         # تجميع موديولات الواي فاي فقط
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- M=drivers/net/wireless modules -j$(nproc)
