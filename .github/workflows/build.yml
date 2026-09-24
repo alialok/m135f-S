@@ -14,25 +14,26 @@ jobs:
     - name: Install Toolchain
       run: |
         sudo apt update
-        sudo apt install -y gcc-arm-linux-gnueabihf build-essential bc libncurses5-dev libssl-dev bison flex
+        sudo apt install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf build-essential bc libncurses5-dev libssl-dev bison flex
 
     - name: Configure Drivers
       run: |
-        DEFCONFIG=$(find arch/arm/configs/ -name "*m13*" -o -name "*exynos850*" | head -n 1 | xargs basename)
-        if [ -z "$DEFCONFIG" ]; then
-          DEFCONFIG="exynos850_defconfig"
-        fi
-        echo "Using defconfig: $DEFCONFIG"
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- $DEFCONFIG || true
+        # البحث عن ملف defconfig المتوفر في السورس كود
+        CONF=$(find arch/ -name "*m13*" -o -name "*exynos850*" | head -n 1)
+        echo "Found Config File: $CONF"
         
+        # إعداد الملف الأساسي
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- exynos850_defconfig || make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- exynos850_defconfig || true
+        
+        # تفعيل كروت الشبكة كـ Modules (.ko)
         echo "CONFIG_MT7601U=m" >> .config
         echo "CONFIG_RT2800USB=m" >> .config
         echo "CONFIG_RT2800USB_RT53XX=y" >> .config
 
     - name: Build Modules
       run: |
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare || true
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- M=drivers/net/wireless modules -j$(nproc)
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare || make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare || true
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- M=drivers/net/wireless modules -j$(nproc) || make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- M=drivers/net/wireless modules -j$(nproc)
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
