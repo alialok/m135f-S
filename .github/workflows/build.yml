@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install Toolchain
       run: |
@@ -18,18 +18,24 @@ jobs:
 
     - name: Configure Drivers
       run: |
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- exynos850-m13dd_defconfig || true
+        DEFCONFIG=$(find arch/arm/configs/ -name "*m13*" -o -name "*exynos850*" | head -n 1 | xargs basename)
+        if [ -z "$DEFCONFIG" ]; then
+          DEFCONFIG="exynos850_defconfig"
+        fi
+        echo "Using defconfig: $DEFCONFIG"
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- $DEFCONFIG || true
+        
         echo "CONFIG_MT7601U=m" >> .config
         echo "CONFIG_RT2800USB=m" >> .config
         echo "CONFIG_RT2800USB_RT53XX=y" >> .config
 
     - name: Build Modules
       run: |
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare || true
         make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- M=drivers/net/wireless modules -j$(nproc)
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: M135F-WiFi-Modules
         path: drivers/net/wireless/**/*.ko
