@@ -11,35 +11,48 @@ jobs:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
 
-    - name: Download Google Clang Toolchain
+    - name: Install Dependencies & Cross Compiler
       run: |
         sudo apt update
-        sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev
-        git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b master-kernel-build-2022 $HOME/clang
+        sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev \
+                            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
     - name: Configure Drivers
       run: |
-        export PATH="$HOME/clang/clang-r450708d/bin:$PATH"
+        # 1. تعيين المعمارية والمترجم
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+
+        # 2. إنشاء ملف الإعدادات المبدئي للهاتف
+        CONF=$(find arch/arm64/configs/ -name "*m13*" -o -name "*exynos850*" 2>/dev/null | head -n 1 | xargs basename)
+        if [ -z "$CONF" ]; then CONF="exynos850-m13xx_defconfig"; fi
         
-        # البحث عن ملف التكوين المناسب لـ exynos850
-        CONF=$(find arch/arm64/configs/ arch/arm/configs/ -name "*m13*" -o -name "*exynos850*" 2>/dev/null | head -n 1 | xargs basename)
-        if [ -z "$CONF" ]; then CONF="exynos850_defconfig"; fi
-        
-        make ARCH=arm64 CC=clang LLVM=1 $CONF || true
-        
-        # تفعيل كروت الواي فاي كـ Modules
-        echo "CONFIG_MT7601U=m" >> .config
-        echo "CONFIG_RT2800USB=m" >> .config
-        echo "CONFIG_RT2800USB_RT53XX=y" >> .config
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $CONF
+
+        # 3. تفعيل تعاريف الواي فاي بأسلوب الكرنل الرسمي
+        scripts/config --enable CONFIG_NETDEVICES
+        scripts/config --enable CONFIG_WLAN
+        scripts/config --module CONFIG_MT7601U
+        scripts/config --module CONFIG_RT2800USB
+        scripts/config --enable CONFIG_RT2800USB_RT53XX
 
     - name: Build WiFi Modules
       run: |
-        export PATH="$HOME/clang/clang-r450708d/bin:$PATH"
-        make ARCH=arm64 CC=clang LLVM=1 modules_prepare || true
-        make ARCH=arm64 CC=clang LLVM=1 M=drivers/net/wireless modules -j$(nproc) || true
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+
+        # تجهيز الأدوات والرموز
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- prepare
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- scripts
+
+        # تجميع موديولات الواي فاي فقط
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- M=drivers/net/wireless modules -j$(nproc)
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: M135F-WiFi-Modules
-        path: drivers/net/wireless/**/*.ko
+        path: |
+          drivers/net/wireless/**/*.ko
+          drivers/net/wireless/*.ko
